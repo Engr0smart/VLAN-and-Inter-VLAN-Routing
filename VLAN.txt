@@ -1,0 +1,162 @@
+enable
+show int g0/1 switchport
+
+- Configure the links between the switches as trunk
+SW1
+conf t
+int g0/1
+switchport mode trunk
+
+SW2
+en
+conf t
+int g0/1
+switchport trunk encap dot1q
+switchport mode trunk
+
+int g0/2
+switchport trunk encap dot1q
+switchport mode trunk
+
+SW3
+en
+conf t
+int g0/2
+switchport mode trunk
+
+- Configure VTP. SW1 as VTP server. SW2 as transparent so as not to synchronize with SW1 VLAN database. SW3 must learn VLAN information from SW1 VLAN database.
+SW1
+conf t
+vtp domain Practice
+vtp mode server
+
+SW2
+conf t
+vtp domain Practice
+vtp mode transparent
+
+SW3
+conf t
+vtp domain Practice
+vtp mode client
+
+You can use sh vtp status to verify each of the switch vtp status
+
+- Configure VLAN on the switches
+VLAN 10 - Tech
+VLAN 20 - Sales
+
+SW1 & SW2
+conf t
+vlan 10
+name Tech
+vlan 20
+name Sales
+vlan 199
+name Native
+exit
+
+- Configure the ports connected
+SW1
+int range f0/1-2
+switchport mode access
+switchport access vlan 10
+int f0/3
+switchport mode access
+switchport access vlan 20
+end
+
+SW3
+int f0/3
+switchport mode access
+switchport access vlan 10
+int range f0/1-2
+switchport mode access
+switchport access vlan 20
+
+SW3 will automatically learn the VLAN information from SW1 because of the vtp configuration. So we don't have to configure VLAN on SW3
+
+Use show vlan brief to verify
+
+- Configure the trunk links to use VLAN 199 as the native VLAN for better security
+
+SW1
+int g0/1
+switchport trunk native vlan 199
+
+SW2
+int g0/1
+switchport trunk native vlan 199
+int g0/2
+switchport trunk native vlan 199
+
+SW3
+int g0/2
+switchport trunk native vlan 199
+
+- Verify connectivity between PCs in the same VLAN. You can ping Tech2 and Tech3 from Tech1. Do the same for Sales VLAN PCs.
+NB: Tech VLAN PCs will not have connection with Sales VLAN PCs because we are yet to configure inter-VLAN routing which would enable layer 3 communications.
+
+Inter-VLAN Routing
+We are going examine the three options in this lab.
+
+Option 1 - Separate Interfaces on Router
+- On R1, configure interfaces fa0/0 and fa0/1 as default gateways for the Tech and Sale PCs respectively
+
+int f0/0
+ip address 10.10.10.1 255.255.255.0
+no shut
+
+int f0/1
+ip address 10.10.20.1 255.255.255.0
+no shut
+
+- On SW2, configure the interfaces to support inter-VLAN routing
+int f0/1
+switchport mode access
+switchport access vlan 10
+int f0/2
+switchport mode access
+switchport access vlan 20
+
+- Verify there is connectivity between the two VLANs
+
+Option 2 - Router on a stick
+- Before starting option 2, shut down any of the two router ports we configured earlier. Interface fa0/1 preferrably
+int fa0/1
+shutdown
+
+- Go ahead to create virtual interfaces on the remaining one physical interface.
+
+int fa0/0
+no ip address
+no shutdown
+int fa0/0.10
+encapsulation dot1q 10
+ip address 10.10.10.1 255.255.255.0
+int fa0/0.20
+encapsulation dot1q 20
+ip address 10.10.20.1 255.255.255.0
+
+
+- Configure SW2 to support inter-VLAN routing
+int fa0/1
+switchport trunk encapsulation dot1q
+switchport mode trunk
+
+- Verify the connectivity between the two VLANs
+
+Option 3 - Layers 3 Switch
+- We don't need a router for this option. Shutdown the second interface of the router to disconnect.
+int f0/0
+shutdown
+
+- Configure SVI (Switch Virtual Interface) on SW2 to support inter-VLAN routing between the two VLANs
+
+ip routing
+int vlan 10
+ip address 10.10.10.1 255.255.255.0
+int vlan 20
+ip address 10.10.20.1 255.255.255.0
+
+- - Verify the connectivity between the two VLANs
